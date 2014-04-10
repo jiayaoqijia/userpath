@@ -20,8 +20,6 @@ by 8x to 264x, with minimal developer effort.
 
 Repo Structure:
 
---------------------------
-
 web-app-mods: Summary of source code modification in case studies.
 
 userpath-patch-chromium12.0.742.112: Patches to chromium and web apps.
