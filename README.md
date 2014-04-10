@@ -1,7 +1,7 @@
 UserPath
 ========
 
-Introduction:
+## Introduction:
 
 --------------------------------------
 
@@ -18,7 +18,9 @@ Chromium, and retrofit it to 20 popular web applications. UserPath reduces
 the size of client-side TCB that has access to user-owned resources
 by 8x to 264x, with minimal developer effort.
 
-Repo Structure:
+--------------------------
+
+## Repo Structure:
 
 --------------------------
 
