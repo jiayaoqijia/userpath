@@ -1,0 +1,1315 @@
+diff -Naur WebCore-Old/bindings/ScriptControllerBase.cpp WebCore-New/bindings/ScriptControllerBase.cpp
+--- WebCore-Old/bindings/ScriptControllerBase.cpp	2013-11-12 17:10:06.000000000 +0800
++++ WebCore-New/bindings/ScriptControllerBase.cpp	2013-10-04 14:38:12.000000000 +0800
+@@ -30,6 +30,8 @@
+ #include "ScriptValue.h"
+ #include "Settings.h"
+ 
++#include <iostream>
++
+ namespace WebCore {
+ 
+ bool ScriptController::canExecuteScripts(ReasonForCallingCanExecuteScripts reason)
+@@ -47,18 +49,28 @@
+ 
+ ScriptValue ScriptController::executeScript(const String& script, bool forceUserGesture)
+ {
+-    return executeScript(ScriptSourceCode(script, forceUserGesture ? KURL() : m_frame->document()->url()));
++	//std::cout << "String in executeScript is " << script.ascii().data() << std::endl;
++	
++	String inIsolatedContext = "";
++	//return executeScript(ScriptSourceCode(script, m_frame->document()->url()), inIsolatedContext);
++
++    return executeScript(ScriptSourceCode(script, forceUserGesture ? KURL() : m_frame->document()->url()), inIsolatedContext);
+ }
+ 
+-ScriptValue ScriptController::executeScript(const ScriptSourceCode& sourceCode)
++ScriptValue ScriptController::executeScript(const ScriptSourceCode& sourceCode, String isolateContextID)
+ {
++	//@UserOrigin
++	//String& temp = sourceCode.source();
++	std::cout << "Source code is " << sourceCode.source().ascii().data() << std::endl;
++	//#UserOrigin
++
+     if (!canExecuteScripts(AboutToExecuteScript) || isPaused())
+         return ScriptValue();
+ 
+     bool wasInExecuteScript = m_inExecuteScript;
+     m_inExecuteScript = true;
+ 
+-    ScriptValue result = evaluate(sourceCode);
++    ScriptValue result = evaluate(sourceCode,isolateContextID);
+ 
+     if (!wasInExecuteScript) {
+         m_inExecuteScript = false;
+@@ -70,6 +82,8 @@
+ 
+ bool ScriptController::executeIfJavaScriptURL(const KURL& url, ShouldReplaceDocumentIfJavaScriptURL shouldReplaceDocumentIfJavaScriptURL)
+ {
++	std::cout << "in execute if javascript url" << std::endl;
++
+     if (!protocolIsJavaScript(url))
+         return false;
+ 
+diff -Naur WebCore-Old/bindings/v8/custom/V8ElementCustom.cpp WebCore-New/bindings/v8/custom/V8ElementCustom.cpp
+--- WebCore-Old/bindings/v8/custom/V8ElementCustom.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/custom/V8ElementCustom.cpp	2013-10-07 21:14:41.000000000 +0800
+@@ -51,14 +51,55 @@
+ 
+ #include <wtf/RefPtr.h>
+ 
++//@UserOrigin
++#include "V8IsolatedContext.h"
++#include <vector>
++#include <iostream>
++#include <sstream>
++//#UserOrigin
++
+ namespace WebCore {
+ 
++//@UserOrigin - Policy checker
++int policyCheck(int scriptContextID, int attrCID)
++{
++	if ((scriptContextID <= 0) && (attrCID > 0)) // Horizontal isolation policy
++		return 0;
++
++	return 1;
++}
++
+ v8::Handle<v8::Value> toV8(Element* impl, bool forceNewObject)
+ {
++
++	//@UserOrigin
++	int contextID = -1;
++    V8IsolatedContext* isolatedContext = V8IsolatedContext::getEntered();
++   	if(isolatedContext != 0){
++   		contextID = isolatedContext->getContextID();
++   	}
++   	
++   	//std::cout << "Context ID in toV8 is " << contextID << std::endl;
++   	//#UserOrigin
++
+     if (!impl)
+         return v8::Null();
+-    if (impl->isHTMLElement())
+-        return toV8(toHTMLElement(impl), forceNewObject);
++    if (impl->isHTMLElement()){
++    	String ndName = ((Element*)impl)->tagName();
++    	std::string nodeName = ndName.ascii().data(); 
++    	//@UserOrigin
++    	int attrCId = ((Element *)impl)->getAttribute("uframeid").toInt();
++    	int flag = policyCheck(contextID,attrCId);
++    	if( flag == 1 ){
++			//std::cout << "Allowed " << contextID << std::endl;
++		    return toV8(toHTMLElement(impl), forceNewObject);
++        }
++        else{
++        	//std::cout << "Not Allowed" << std::endl;
++        	return v8::Null();
++        }
++        //#UserOrigin  
++    }
+ #if ENABLE(SVG)
+     if (impl->isSVGElement())
+         return toV8(static_cast<SVGElement*>(impl), forceNewObject);
+diff -Naur WebCore-Old/bindings/v8/custom/V8NodeCustom.cpp WebCore-New/bindings/v8/custom/V8NodeCustom.cpp
+--- WebCore-Old/bindings/v8/custom/V8NodeCustom.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/custom/V8NodeCustom.cpp	2013-10-09 17:49:24.000000000 +0800
+@@ -55,6 +55,12 @@
+ 
+ #include <wtf/RefPtr.h>
+ 
++//@UserOrigin
++#include "V8IsolatedContext.h"
++#include <iostream>
++#include <sstream>
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ // This function is customized to take advantage of the optional 4th argument: shouldLazyAttach
+@@ -102,6 +108,9 @@
+     Node* imp = V8Node::toNative(holder);
+     ExceptionCode ec = 0;
+     Node* oldChild = V8Node::HasInstance(args[0]) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(args[0])) : 0;
++    
++    //std::cout << "Remove child, element context id is " << ((Element*)oldChild)->getContextID() << std::endl;
++    
+     bool success = imp->removeChild(oldChild, ec);
+     if (ec) {
+         V8Proxy::setDOMException(ec);
+@@ -120,6 +129,72 @@
+     Node* imp = V8Node::toNative(holder);
+     ExceptionCode ec = 0;
+     Node* newChild = V8Node::HasInstance(args[0]) ? V8Node::toNative(v8::Handle<v8::Object>::Cast(args[0])) : 0;
++    
++    
++    if (newChild->isHTMLElement()){
++    	
++    	int contextIDTemp = -1;
++    	V8IsolatedContext* isolatedContext2 = V8IsolatedContext::getEntered();
++    
++    	if(isolatedContext2 != 0){
++    		contextIDTemp = isolatedContext2->getContextID();
++    	}
++    
++    	String ndName = ((Element*)newChild)->tagName();
++   		std::string nodeName = ndName.ascii().data();
++   		
++   		AtomicString idnode = ((Element*)newChild)->getAttribute("id");
++   		String idnode2 = idnode.string();
++   		std::string idnode3 = idnode2.ascii().data();
++   		
++   		AtomicString ufrnode = ((Element*)newChild)->getAttribute("uframeid");
++   		String ufrnode2 = ufrnode.string();
++   		std::string ufrnode3 = ufrnode2.ascii().data();
++   		
++   		//std::cout << "Nodename is " << nodeName << " ID is " << idnode3 << " with uframeid " << ufrnode3 << " in context ID " << contextIDTemp << std::endl;
++   		
++   		if((contextIDTemp <= 0) && (ufrnode3.compare("")!=0)){
++   			return v8::Null();
++   		}
++    }
++    
++    //@UserOrigin
++    int contextID = 0;
++    V8IsolatedContext* isolatedContext = V8IsolatedContext::getEntered();
++   	if(isolatedContext != 0){
++   		contextID = isolatedContext->getContextID();
++   		
++   		std::ostringstream cID;
++   		cID << contextID;
++   		
++   		if (newChild->isHTMLElement() && (contextID > 0)){
++   			String ndName = ((Element*)newChild)->tagName();
++   			std::string nodeName = ndName.ascii().data();
++   			
++   			if(nodeName.compare("INPUT") == 0 || nodeName.compare("Input") == 0 || nodeName.compare("input") == 0){
++   				((Element*)newChild)->setAttribute("style", "background-color: yellow;", ec, 0);
++   			}
++   			
++   			//std::cout << "Element with contextid is called, context id is " << contextID << " with tagname " << nodeName << std::endl;
++   			((Element*)newChild)->setAttribute("uframeid", cID.str().c_str(), ec, 0);
++   			((Element*)newChild)->setContextID(contextID);
++   		}
++   		else{
++			std::cout << "An error occurred in appendChildCallback" << std::endl;
++   		}
++   	}
++   
++    
++    //String ndName = ((Element*)newChild)->tagName();
++    //std::string nodeName = ndName.ascii().data();
++    //std::cout << "Element is " << nodeName.ascii().data() << std::endl;
++    
++    /*if(nodeName.compare("SCRIPT") == 0 || nodeName.compare("Script") == 0 || nodeName.compare("script") == 0){
++    	((Element*)newChild)->setAttribute("uframeid", "", ec, 0);
++    }*/
++    
++    //#UserOrigin
++    
+     bool success = imp->appendChild(newChild, ec, true );
+     if (ec) {
+         V8Proxy::setDOMException(ec);
+@@ -130,8 +205,17 @@
+     return v8::Null();
+ }
+ 
++// Policy Checker
++/*int policyCheck(int contextID, int cID){
++	if(contextID != cID)
++		return 0;
++		
++	return 1;
++}*/
++
+ v8::Handle<v8::Value> toV8Slow(Node* impl, bool forceNewObject)
+ {
++	//return v8::Null();
+     if (!impl)
+         return v8::Null();
+ 
+@@ -140,6 +224,32 @@
+         if (!wrapper.IsEmpty())
+             return wrapper;
+     }
++    
++    /*@UserOrigin
++    
++    if(impl->isHTMLElement()){
++    	std::cout << "UFrame id of html element in toV8Slow is " << ((Element *)impl)->getAttribute("uframeid").toInt() << std::endl;
++ 
++    }
++    
++   	int contextID = 0;
++   	V8IsolatedContext* isolatedContext = V8IsolatedContext::getEntered();
++   	if(isolatedContext)
++   		contextID = isolatedContext->getContextID();
++   		
++   		//std::cout << "Context ID in tov8slow is " << contextID << std::endl;
++   		
++   		if((contextID > 0) && (impl->isHTMLElement())){
++   			if(((Element *)impl)->hasAttribute("uframeid")){
++   				int cID = ((Element *)impl)->getAttribute("uframeid").toInt();
++   				int result = policyCheck(contextID, cID);
++   				if(!result)
++   					return v8::Null();
++   			}
++   		}
++    
++    //#UserOrigin*/
++    
+     switch (impl->nodeType()) {
+     case Node::ELEMENT_NODE:
+         return toV8(static_cast<Element*>(impl), forceNewObject);
+diff -Naur WebCore-Old/bindings/v8/ScriptController.cpp WebCore-New/bindings/v8/ScriptController.cpp
+--- WebCore-Old/bindings/v8/ScriptController.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/ScriptController.cpp	2013-10-08 10:19:42.000000000 +0800
+@@ -68,6 +68,12 @@
+ #include <QScriptEngine>
+ #endif
+ 
++//@UserOrigin
++#include "V8IsolatedContext.h"
++#include <sstream> 
++#include <vector>
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ void ScriptController::initializeThreading()
+@@ -216,14 +222,153 @@
+     m_proxy->evaluateInIsolatedWorld(worldID, sources, extensionGroup);
+ }
+ 
++//@UserOrigin
++
++std::vector<std::string> split(const std::string &s, std::string delim) {
++    std::size_t found = s.find(delim);
++    std::vector<std::string> elems;	
++    
++	if (found != std::string::npos)
++    	elems.push_back(s.substr(0,found));
++
++	std::string temp = s.substr(found+4);
++  	found=temp.find(delim);
++  	
++  	if (found!=std::string::npos)
++		elems.push_back(temp.substr(0,found));
++		
++	temp = temp.substr(found+4);
++  	found=temp.find(delim);
++  	
++  	if (found!=std::string::npos)
++		elems.push_back(temp.substr(0,found));    
++    
++    temp = temp.substr(found+4);
++    elems.push_back(temp);
++    
++    return elems;
++}
++
++//#UserOrigin
++
+ // Evaluate a script file in the environment of this proxy.
+-ScriptValue ScriptController::evaluate(const ScriptSourceCode& sourceCode)
++ScriptValue ScriptController::evaluate(const ScriptSourceCode& sourceCode,String isolateContextID)
+ {
+     String sourceURL = sourceCode.url();
++    
++    //@UserOrigin --- Getting the JS Content of the WebPage
++    //std::cout << "URL is " << sourceURL.ascii().data() << std::endl;
++    //std::cout << "Source code is " << sourceCode.source().ascii().data() << std::endl;
++   
++	//const String mString;
++    //std::cout << mString.ascii().data() << std::endl;
++    
++    std::string temp = sourceCode.source().ascii().data();
++    
++    // Parsed on if it is UFrame code
++    std::vector<std::string> strTok;
++    std::size_t uframeCheck = temp.find("UFRAME>>");
++    
++	if( uframeCheck != std::string::npos ){
++		strTok = split(temp, ">><<"); // Vector of string tokens
++		
++		//std::cout << "Vector 0 is " << strTok.at(0) << std::endl;
++		//std::cout << "Vector 1 is " << strTok.at(1) << std::endl;
++		//std::cout << "Vector 2 is " << strTok.at(2) << std::endl;
++		//std::cout << "Vector 3 is " << strTok.at(3) << std::endl;
++		//mString = String("alert('String decrypted and parsed');");
++    }
++    
++    //#UserOrigin
++    
+     const String* savedSourceURL = m_sourceURL;
+     m_sourceURL = &sourceURL;
+ 
+     v8::HandleScope handleScope;
++    
++    //@UserOrigin
++    v8::Handle<v8::Context> v8Context;
++	int targetcontextID = 0;
++	
++	if (isolateContextID=="") {
++		v8Context = V8Proxy::mainWorldContext(m_proxy->frame());
++	} 
++	else {
++		V8IsolatedContext* isolatedContext;
++		targetcontextID = isolateContextID.toInt();
++		if ( targetcontextID <=0 ){
++			v8Context = V8Proxy::mainWorldContext(m_proxy->frame());
++		} else {
++			if(m_proxy->getIsolatedContextMap().contains(targetcontextID)){
++				isolatedContext = m_proxy->getIsolatedContextMap().get(targetcontextID);
++				v8Context = v8::Local<v8::Context>::New(isolatedContext->context());
++			} else {
++				isolatedContext = new V8IsolatedContext(m_proxy.get(),1,targetcontextID);
++				v8Context = v8::Local<v8::Context>::New(isolatedContext->context());
++				m_proxy->addContextToMap(targetcontextID, isolatedContext);		
++			}
++		}
++		
++		// Set isolated contextID in member variable
++		if(targetcontextID > 0)
++			isolatedContext->setContextID(targetcontextID);
++		else
++			std::cout << "Error in setting ContextID" << std::endl;
++	}
++	
++	if (v8Context.IsEmpty())
++        return ScriptValue();
++    
++    v8::Context::Scope scope(v8Context);
++
++    RefPtr<Frame> protect(m_frame);
++
++
++	std::size_t found = temp.find("UFRAME>>");
++	if(found!=std::string::npos){
++		//std::cout << "contains testhello" << std::endl;
++    	//ScriptSourceCode ssc = ScriptSourceCode(mString,sourceCode.url());
++    	const String mString(strTok.at(3).c_str());
++    	
++    	// Set capability token and vector of IDs  	
++    	V8IsolatedContext::capToken = strTok.at(1).data();
++    	//std::cout << "Value captoken is " << V8IsolatedContext::capToken << std::endl;
++    	
++    	v8::Local<v8::Value> object = m_proxy->evaluate(ScriptSourceCode(mString,sourceCode.url()), 0);
++    	m_sourceURL = savedSourceURL;
++
++		if (object.IsEmpty())
++		    return ScriptValue();
++
++		return ScriptValue(object);
++    }
++    else{
++    	v8::Local<v8::Value> object = m_proxy->evaluate(sourceCode, 0);
++    
++		m_sourceURL = savedSourceURL;
++
++		if (object.IsEmpty())
++		    return ScriptValue();
++
++		return ScriptValue(object);
++    }
++	//#UserOrigin
++
++    /* OLD CODE
++    v8::Local<v8::Value> object = m_proxy->evaluate(sourceCode, 0);
++    
++    m_sourceURL = savedSourceURL;
++
++    if (object.IsEmpty())
++        return ScriptValue();
++
++    return ScriptValue(object);  
++    */
++    
++    //#UserOrigin
++    
++    /* == OLD CODE
++    
+     v8::Handle<v8::Context> v8Context = V8Proxy::mainWorldContext(m_proxy->frame());
+     if (v8Context.IsEmpty())
+         return ScriptValue();
+@@ -244,6 +389,7 @@
+         return ScriptValue();
+ 
+     return ScriptValue(object);
++    */
+ }
+ 
+ TextPosition0 ScriptController::eventHandlerPosition() const
+diff -Naur WebCore-Old/bindings/v8/ScriptController.h WebCore-New/bindings/v8/ScriptController.h
+--- WebCore-Old/bindings/v8/ScriptController.h	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/ScriptController.h	2013-09-17 10:09:19.000000000 +0800
+@@ -71,7 +71,7 @@
+     // or this accessor should be made JSProxy*
+     V8Proxy* proxy() { return m_proxy.get(); }
+ 
+-    ScriptValue executeScript(const ScriptSourceCode&);
++    ScriptValue executeScript(const ScriptSourceCode&, String isolateContextID = "");
+     ScriptValue executeScript(const String& script, bool forceUserGesture = false);
+ 
+     // Returns true if argument is a JavaScript URL.
+@@ -83,7 +83,7 @@
+     // Evaluate a script file in the environment of this proxy.
+     // If succeeded, 'succ' is set to true and result is returned
+     // as a string.
+-    ScriptValue evaluate(const ScriptSourceCode&);
++    ScriptValue evaluate(const ScriptSourceCode& sourceCode,String isolateContextID = "");
+ 
+     void evaluateInIsolatedWorld(unsigned worldID, const Vector<ScriptSourceCode>&);
+ 
+diff -Naur WebCore-Old/bindings/v8/ScriptSourceCode.h WebCore-New/bindings/v8/ScriptSourceCode.h
+--- WebCore-Old/bindings/v8/ScriptSourceCode.h	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/ScriptSourceCode.h	2013-10-04 16:33:59.000000000 +0800
+@@ -61,7 +61,14 @@
+ 
+     bool isEmpty() const { return m_source.isEmpty(); }
+ 
++    /* OLD Code */
+     const String& source() const { return m_source; }
++    /**/
++    
++    //@UserOrigin
++    //String& source() { return m_source; }
++    //#UserOrigin
++    
+     CachedScript* cachedScript() const { return m_cachedScript.get(); }
+     const KURL& url() const
+     {
+@@ -71,9 +78,12 @@
+     }
+     int startLine() const { return m_startPosition.m_line.oneBasedInt(); }
+     const TextPosition1& startPosition() const { return m_startPosition; }
+-
++	
++	
+ private:
+-    String m_source;
++    //@UserOrigin
++	String m_source;
++	//#UserOrigin
+     CachedResourceHandle<CachedScript> m_cachedScript;
+     KURL m_url;
+     TextPosition1 m_startPosition;
+diff -Naur WebCore-Old/bindings/v8/V8AbstractEventListener.cpp WebCore-New/bindings/v8/V8AbstractEventListener.cpp
+--- WebCore-Old/bindings/v8/V8AbstractEventListener.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/V8AbstractEventListener.cpp	2013-10-02 16:34:47.000000000 +0800
+@@ -44,6 +44,11 @@
+ #include "WorkerContext.h"
+ #include "WorkerContextExecutionProxy.h"
+ 
++//@UserOrigin
++#include <iostream>
++#include "V8IsolatedContext.h"
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ static void weakEventListenerCallback(v8::Persistent<v8::Value>, void* parameter)
+@@ -84,7 +89,35 @@
+ 
+     v8::HandleScope handleScope;
+ 
++    /* -- OLD CODE*/
+     v8::Local<v8::Context> v8Context = toV8Context(context, worldContext());
++    /**/
++    
++    /*@UserOrigin 
++    v8::Local<v8::Context> v8Context;
++    V8Proxy* proxy = V8Proxy::retrieve(context);
++    int contextID = this->getContextID();
++    
++    if(contextID <= 0){
++    	Node* targetNode = event->target()->toNode();
++    	if (targetNode){
++    		Element* nodeElement = static_cast<Element*> (targetNode);
++    		if(nodeElement->hasAttribute("uframeid")){
++    			contextID = nodeElement->getAttribute("uframeid").toInt();
++    			this->setContextID(contextID);
++    		}
++    	}
++    }
++    
++    if((contextID > 0) && (proxy->getIsolatedContextMap().contains(contextID))){
++    	V8IsolatedContext* isolatedContext = proxy->getIsolatedContextMap().get(contextID);
++    	v8Context = v8::Local<v8::Context>::New(isolatedContext->context());
++    }
++    else{
++    	v8Context = toV8Context(context, worldContext());
++    }
++    //#UserOrigin*/
++    
+     if (v8Context.IsEmpty())
+         return;
+ 
+@@ -96,6 +129,7 @@
+     ASSERT(!jsEvent.IsEmpty());
+ 
+     invokeEventHandler(context, event, jsEvent);
++    
+ }
+ 
+ void V8AbstractEventListener::disposeListenerObject()
+@@ -126,7 +160,24 @@
+     if (jsEvent.IsEmpty())
+         return;
+ 
++	/* OLD CODE
+     v8::Local<v8::Context> v8Context = toV8Context(context, worldContext());
++    */
++    
++    //@UserOrigin
++    v8::Local<v8::Context> v8Context;
++    V8Proxy* proxy = V8Proxy::retrieve(context);
++    int cID = this->getContextID();
++    
++    if((cID > 0) && (proxy->getIsolatedContextMap().contains(cID))){
++    	V8IsolatedContext* isolatedContext = proxy->getIsolatedContextMap().get(cID);
++    	v8Context = v8::Local<v8::Context>::New(isolatedContext->context());
++    }
++    else{
++    	v8Context = toV8Context(context,worldContext());
++    }
++    //#UserOrigin
++    
+     if (v8Context.IsEmpty())
+         return;
+ 
+diff -Naur WebCore-Old/bindings/v8/V8DOMWrapper.cpp WebCore-New/bindings/v8/V8DOMWrapper.cpp
+--- WebCore-Old/bindings/v8/V8DOMWrapper.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/V8DOMWrapper.cpp	2013-10-02 00:56:20.000000000 +0800
+@@ -96,6 +96,10 @@
+ #include <wtf/StdLibExtras.h>
+ #include <wtf/UnusedParam.h>
+ 
++//@UserOrigin
++#include <iostream>
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ typedef HashMap<Node*, v8::Object*> DOMNodeMap;
+@@ -120,6 +124,8 @@
+ // The caller must have increased node's ref count.
+ void V8DOMWrapper::setJSWrapperForDOMNode(Node* node, v8::Persistent<v8::Object> wrapper)
+ {
++	std::cout << "setJS DOM Wrapper" << std::endl;
++	
+     ASSERT(V8DOMWrapper::maybeDOMWrapper(wrapper));
+     getDOMNodeMap().set(node, wrapper);
+ }
+diff -Naur WebCore-Old/bindings/v8/V8IsolatedContext.cpp WebCore-New/bindings/v8/V8IsolatedContext.cpp
+--- WebCore-Old/bindings/v8/V8IsolatedContext.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/V8IsolatedContext.cpp	2013-10-07 16:17:35.000000000 +0800
+@@ -41,6 +41,10 @@
+ 
+ namespace WebCore {
+ 
++//@UserOrigin
++int V8IsolatedContext::sample = 0;
++std::string V8IsolatedContext::capToken = "";
++//#UserOrigin
+ 
+ void V8IsolatedContext::contextWeakReferenceCallback(v8::Persistent<v8::Value> object, void* isolatedContext)
+ {
+@@ -49,9 +53,10 @@
+     delete context;
+ }
+ 
+-V8IsolatedContext::V8IsolatedContext(V8Proxy* proxy, int extensionGroup)
+-    : m_world(IsolatedWorld::create())
++V8IsolatedContext::V8IsolatedContext(V8Proxy* proxy, int extensionGroup, int CID)
++    : m_world(IsolatedWorld::create()) //@UserOrigin
+ {
++	m_contextID = CID; //@UserOrigin
+     v8::HandleScope scope;
+     // FIXME: We should be creating a new V8DOMWindowShell here instead of riping out the context.
+     m_context = SharedPersistent<v8::Context>::create(proxy->windowShell()->createNewContext(v8::Handle<v8::Object>(), extensionGroup));
+@@ -78,6 +83,12 @@
+     proxy->frame()->loader()->client()->didCreateIsolatedScriptContext();
+ }
+ 
++//@UserOrigin
++static void setCapToken(std::string token){
++	V8IsolatedContext::capToken = token;
++}
++//#UserOrigin
++
+ void V8IsolatedContext::destroy()
+ {
+     m_context->get().MakeWeak(this, &contextWeakReferenceCallback);
+diff -Naur WebCore-Old/bindings/v8/V8IsolatedContext.h WebCore-New/bindings/v8/V8IsolatedContext.h
+--- WebCore-Old/bindings/v8/V8IsolatedContext.h	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/V8IsolatedContext.h	2013-10-07 21:12:55.000000000 +0800
+@@ -38,6 +38,12 @@
+ #include "V8Utilities.h"
+ #include <v8.h>
+ 
++//@UserOrigin
++#include <iostream>
++#include <string>
++#include <sstream>
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ class V8Proxy;
+@@ -54,11 +60,12 @@
+ // isolated worlds have access to the DOM, they need their own DOM wrappers
+ // to avoid having pointers to the main world's DOM wrappers (which are
+ // JavaScript objects).
++
+ class V8IsolatedContext {
+ public:
+     // Creates an isolated world. To destroy it, call destroy().
+     // This will delete the isolated world when the context it owns is GC'd.
+-    V8IsolatedContext(V8Proxy* proxy, int extensionGroup);
++    V8IsolatedContext(V8Proxy* proxy, int extensionGroup, int CID=0); //@UserOrigin
+     ~V8IsolatedContext();
+ 
+     // Call this to destroy the isolated world. It will be deleted sometime
+@@ -81,17 +88,30 @@
+         // V8 team to add a real property to v8::Context for isolated worlds.
+         // Until then, we optimize the common case of not having any isolated
+         // worlds at all.
+-        if (!IsolatedWorld::count())
++        if (!IsolatedWorld::count()){
+             return 0;
+-        if (!v8::Context::InContext())
++        }
++        
++        if (!v8::Context::InContext()){
+             return 0;
++        }
++        
++        //std::cout << "can return context, num of count is " << IsolatedWorld::count() << std::endl;
+         return reinterpret_cast<V8IsolatedContext*>(getGlobalObject(v8::Context::GetEntered())->GetPointerFromInternalField(V8DOMWindow::enteredIsolatedWorldIndex));
+     }
++    
++    static void setCapToken(std::string token); //@UserOrigin
+ 
+     v8::Handle<v8::Context> context() { return m_context->get(); }
+     PassRefPtr<SharedPersistent<v8::Context> > sharedContext() { return m_context; }
+ 
+     IsolatedWorld* world() const { return m_world.get(); }
++    
++    //@UserOrigin
++    int getContextID() { return m_contextID; }
++    void setContextID(int CID) { m_contextID = CID; }
++    static std::string capToken;
++	//#UserOrigin
+ 
+ private:
+     static v8::Handle<v8::Object> getGlobalObject(v8::Handle<v8::Context> context)
+@@ -108,6 +128,11 @@
+     RefPtr<SharedPersistent<v8::Context> > m_context;
+ 
+     RefPtr<IsolatedWorld> m_world;
++    
++    //@UserOrigin
++    static int sample;
++    int m_contextID;
++    //#UserOrigin
+ };
+ 
+ } // namespace WebCore
+diff -Naur WebCore-Old/bindings/v8/V8LazyEventListener.cpp WebCore-New/bindings/v8/V8LazyEventListener.cpp
+--- WebCore-Old/bindings/v8/V8LazyEventListener.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/V8LazyEventListener.cpp	2013-10-03 10:44:38.000000000 +0800
+@@ -40,6 +40,11 @@
+ 
+ #include <wtf/StdLibExtras.h>
+ 
++//@UserOrigin
++#include "V8IsolatedContext.h"
++#include <iostream>
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ V8LazyEventListener::V8LazyEventListener(const String& functionName, bool isSVGEvent, const String& code, const String sourceURL, const TextPosition0& position, const WorldContextHandle& worldContext)
+@@ -91,7 +96,22 @@
+         return;
+ 
+     // Use the outer scope to hold context.
++    /* OLD CODE*/
+     v8::Local<v8::Context> v8Context = worldContext().adjustedContext(proxy);
++    /**/
++    
++    /*@UserOrigin
++    v8::Local<v8::Context> v8Context;
++    int cID = this->getContextID();
++    if(cID > 0){
++    	V8IsolatedContext* isolatedContext = proxy->getIsolatedContextMap().get(cID);
++    	v8Context = v8::Local<v8::Context>::New(isolatedContext->context());
++    }
++    else{
++    	v8Context = worldContext().adjustedContext(proxy);
++    }
++    //#UserOrigin*/
++    
+     // Bail out if we cannot get the context.
+     if (v8Context.IsEmpty())
+         return;
+diff -Naur WebCore-Old/bindings/v8/V8Proxy.h WebCore-New/bindings/v8/V8Proxy.h
+--- WebCore-Old/bindings/v8/V8Proxy.h	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/bindings/v8/V8Proxy.h	2013-10-02 00:53:08.000000000 +0800
+@@ -278,6 +278,11 @@
+ 
+         // Report an unsafe attempt to access the given frame on the console.
+         static void reportUnsafeAccessTo(Frame* target);
++        
++        //@UserOrigin
++        HashMap<int,V8IsolatedContext*> getIsolatedContextMap() { return m_isolatedWorlds; }
++        void addContextToMap(int targetID, V8IsolatedContext* context) { m_isolatedWorlds.add(targetID, context); }
++       	//#UserOrigin
+ 
+     private:
+         void didLeaveScriptContext();
+diff -Naur WebCore-Old/dom/Attribute.h WebCore-New/dom/Attribute.h
+--- WebCore-Old/dom/Attribute.h	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/dom/Attribute.h	2013-09-17 19:54:07.000000000 +0800
+@@ -28,6 +28,8 @@
+ #include "CSSMappedAttributeDeclaration.h"
+ #include "QualifiedName.h"
+ 
++#include <iostream>
++
+ namespace WebCore {
+ 
+ class Attr;
+@@ -84,6 +86,11 @@
+     void parserSetName(const QualifiedName& name) { m_name = name; }
+ 
+     bool isMappedAttribute() { return m_isMappedAttribute; }
++    
++    //@UserOrigin
++    int getContextID() { return m_contextID; }
++    void setContextID(int cID) { m_contextID = cID; }
++    //#UserOrigin
+ 
+ private:
+     Attribute(const QualifiedName& name, const AtomicString& value, bool isMappedAttribute, CSSMappedAttributeDeclaration* styleDecl)
+@@ -114,6 +121,8 @@
+     QualifiedName m_name;
+     AtomicString m_value;
+     RefPtr<CSSMappedAttributeDeclaration> m_styleDecl;
++    
++    int m_contextID; //@UserOrigin
+ };
+ 
+ } // namespace WebCore
+diff -Naur WebCore-Old/dom/Document.cpp WebCore-New/dom/Document.cpp
+--- WebCore-Old/dom/Document.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/dom/Document.cpp	2013-10-28 20:38:25.000000000 +0800
+@@ -2179,6 +2179,7 @@
+ 
+ void Document::write(const SegmentedString& text, Document* ownerDocument)
+ {
++	printf("calling document.write function\n");
+     NestingLevelIncrementer nestingLevelIncrementer(m_writeRecursionDepth);
+ 
+     m_writeRecursionIsTooDeep = (m_writeRecursionDepth > 1) && m_writeRecursionIsTooDeep;
+diff -Naur WebCore-Old/dom/Element.cpp WebCore-New/dom/Element.cpp
+--- WebCore-Old/dom/Element.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/dom/Element.cpp	2013-10-03 10:43:38.000000000 +0800
+@@ -66,6 +66,10 @@
+ #include "SVGNames.h"
+ #endif
+ 
++//@UserOrigin
++#include <iostream>
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ using namespace HTMLNames;
+@@ -230,12 +234,14 @@
+ {
+     ExceptionCode ec;
+     setAttribute(name, value, ec);
++    
+ }
+     
+ void Element::setCStringAttribute(const QualifiedName& name, const char* cStringValue)
+ {
+     ExceptionCode ec;
+-    setAttribute(name, AtomicString(cStringValue), ec);
++    setAttribute(name, AtomicString(cStringValue), ec);   
++  
+ }
+ 
+ void Element::setBooleanAttribute(const QualifiedName& name, bool b)
+@@ -650,8 +656,9 @@
+     return getAttribute(QualifiedName(nullAtom, localName, namespaceURI));
+ }
+ 
+-void Element::setAttribute(const AtomicString& name, const AtomicString& value, ExceptionCode& ec)
++void Element::setAttribute(const AtomicString& name, const AtomicString& value, ExceptionCode& ec, int contextID)
+ {
++
+     if (!Document::isValidName(name)) {
+         ec = INVALID_CHARACTER_ERR;
+         return;
+@@ -673,10 +680,19 @@
+     if (isIdAttributeName(old ? old->name() : attributeName))
+         updateId(old ? old->value() : nullAtom, value);
+ 
+-    if (old && value.isNull())
++    if (old && value.isNull()){
+         m_attributeMap->removeAttribute(old->name());
+-    else if (!old && !value.isNull())
+-        m_attributeMap->addAttribute(createAttribute(attributeName, value));
++    }
++    else if (!old && !value.isNull()){ //@UserOrigin
++    	if(contextID <= 0){
++        	m_attributeMap->addAttribute(createAttribute(attributeName, value));
++        }
++        else{
++        	RefPtr<Attribute> attr = createAttribute(QualifiedName(nullAtom, localName, nullAtom), value);
++        	attr->setContextID(contextID);
++        	m_attributeMap->addAttribute(attr);
++        }
++    } //#UserOrigin
+     else if (old && !value.isNull()) {
+         if (Attr* attrNode = old->attr())
+             attrNode->setValue(value);
+diff -Naur WebCore-Old/dom/Element.h WebCore-New/dom/Element.h
+--- WebCore-Old/dom/Element.h	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/dom/Element.h	2013-10-03 12:46:31.000000000 +0800
+@@ -30,6 +30,10 @@
+ #include "NamedNodeMap.h"
+ #include "ScrollTypes.h"
+ 
++//@UserOrigin
++#include "V8IsolatedContext.h"
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ class Attribute;
+@@ -132,7 +136,7 @@
+     const AtomicString& getAttribute(const String& name) const;
+     const AtomicString& getAttributeNS(const String& namespaceURI, const String& localName) const;
+ 
+-    void setAttribute(const AtomicString& name, const AtomicString& value, ExceptionCode&);
++    void setAttribute(const AtomicString& name, const AtomicString& value, ExceptionCode&, int contextID=0); //@UserOrigin
+     void setAttributeNS(const AtomicString& namespaceURI, const AtomicString& qualifiedName, const AtomicString& value, ExceptionCode&, FragmentScriptingPermission = FragmentScriptingAllowed);
+ 
+     bool isIdAttributeName(const QualifiedName&) const;
+@@ -351,6 +355,11 @@
+ 
+     PassRefPtr<WebKitAnimationList> webkitGetAnimations() const;
+ 
++	//@UserOrigin
++    int getContextID() { return m_contextID; }
++    void setContextID(int cID) { m_contextID = cID; }
++    //#UserOrigin
++
+ protected:
+     Element(const QualifiedName& tagName, Document* document, ConstructionType type)
+         : ContainerNode(document, type)
+@@ -372,6 +381,11 @@
+     void idAttributeChanged(Attribute*);
+ 
+ private:
++
++	//@UserOrigin
++	int m_contextID;
++	//#UserOrigin
++
+     void scrollByUnits(int units, ScrollGranularity);
+ 
+     virtual void setPrefix(const AtomicString&, ExceptionCode&);
+diff -Naur WebCore-Old/dom/EventListener.h WebCore-New/dom/EventListener.h
+--- WebCore-Old/dom/EventListener.h	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/dom/EventListener.h	2013-10-02 14:33:30.000000000 +0800
+@@ -58,6 +58,11 @@
+ 
+         bool isAttribute() const { return virtualisAttribute(); }
+         Type type() const { return m_type; }
++        
++        //@UserOrigin
++        int getContextID() {return m_contextID;}
++        void setContextID(int cID) {m_contextID = cID;}
++        //#UserOrigin
+ 
+     protected:
+         EventListener(Type type)
+@@ -69,6 +74,7 @@
+         virtual bool virtualisAttribute() const { return false; }
+         
+         Type m_type;
++        int m_contextID; //@UserOrigin
+     };
+ 
+ }
+diff -Naur WebCore-Old/dom/ScriptElement.cpp WebCore-New/dom/ScriptElement.cpp
+--- WebCore-Old/dom/ScriptElement.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/dom/ScriptElement.cpp	2013-10-02 01:29:46.000000000 +0800
+@@ -45,6 +45,9 @@
+ #include <wtf/StdLibExtras.h>
+ #include <wtf/text/StringHash.h>
+ 
++#include <iostream>
++#include <string>
++
+ #if ENABLE(SVG)
+ #include "SVGNames.h"
+ #include "SVGScriptElement.h"
+@@ -260,6 +263,7 @@
+ 
+ void ScriptElement::executeScript(const ScriptSourceCode& sourceCode)
+ {
++
+     ASSERT(m_alreadyStarted);
+ 
+     if (sourceCode.isEmpty())
+@@ -276,7 +280,20 @@
+             // Create a script from the script element node, using the script
+             // block's source and the script block's type.
+             // Note: This is where the script is compiled and actually executed.
+-            frame->script()->evaluate(sourceCode);
++            
++            
++            //@UserOrigin
++            String isolateContextID ="";
++            std::string tagName = (m_element->nodeName()).ascii().data();
++            //std::cout << "in execute script, with element" << tagName << std::endl;
++            
++            if (m_element->hasAttribute("uframeid")) {
++	        	isolateContextID = m_element->getAttribute("uframeid");
++	        	//printf("Found canExecuteInIsolatedContext value is=%d\n", isolateContextID.toInt());
++	        }
++	        //#UserOrigin
++            
++            frame->script()->evaluate(sourceCode,isolateContextID);
+         }
+ 
+         Document::updateStyleForAllDocuments();
+diff -Naur WebCore-Old/editing/MarkupAccumulator.cpp WebCore-New/editing/MarkupAccumulator.cpp
+--- WebCore-Old/editing/MarkupAccumulator.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/editing/MarkupAccumulator.cpp	2013-10-09 18:06:59.000000000 +0800
+@@ -39,6 +39,11 @@
+ #include "XMLNSNames.h"
+ #include <wtf/unicode/CharacterNames.h>
+ 
++//@UserOrigin
++#include <iostream>
++#include "V8IsolatedContext.h"
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ using namespace HTMLNames;
+@@ -98,6 +103,25 @@
+     if (node == nodeToSkip)
+         return;
+ 
++	//@UserOrigin
++	
++	int contextID = -1;
++    V8IsolatedContext* isolatedContext = V8IsolatedContext::getEntered();
++   	if(isolatedContext != 0){
++   		contextID = isolatedContext->getContextID();
++   	}
++	
++	if (node->isHTMLElement()){
++		String ndName = ((Element*)node)->tagName();
++		std::string nodeName= ndName.ascii().data();
++		int attrCId = ((Element*)node)->getAttribute("uframeid").toInt();
++		//std::cout << "in serialize nodename is " << nodeName << " with id " << attrCId << " in context id " << contextID << std::endl;
++		if(attrCId > 0 && contextID <= 0){
++			return;
++		}
++	}
++	//#UserOrigin
++
+     Namespaces namespaceHash;
+     if (namespaces)
+         namespaceHash = *namespaces;
+@@ -106,8 +130,9 @@
+         appendStartTag(node, &namespaceHash);
+ 
+     if (!(node->document()->isHTMLDocument() && elementCannotHaveEndTag(node))) {
+-        for (Node* current = node->firstChild(); current; current = current->nextSibling())
++        for (Node* current = node->firstChild(); current; current = current->nextSibling()){
+             serializeNodesWithNamespaces(current, nodeToSkip, IncludeNode, &namespaceHash);
++        }
+     }
+ 
+     if (!childrenOnly)
+diff -Naur WebCore-Old/html/HTMLElement.cpp WebCore-New/html/HTMLElement.cpp
+--- WebCore-Old/html/HTMLElement.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/html/HTMLElement.cpp	2013-10-03 15:13:11.000000000 +0800
+@@ -265,7 +265,19 @@
+ 
+ String HTMLElement::innerHTML() const
+ {
++	/*@UserOrigin   
++    int attrCId = ((Element *)this)->getAttribute("uframeid").toInt();
++    if(attrCId > 0){
++    	return "";
++    }
++    else{
++    	return createMarkup(this, ChildrenOnly);
++    }
++    //#UserOrigin*/
++    
++    /* OLD */
+     return createMarkup(this, ChildrenOnly);
++    /**/
+ }
+ 
+ String HTMLElement::outerHTML() const
+diff -Naur WebCore-Old/html/HTMLIFrameElement.cpp WebCore-New/html/HTMLIFrameElement.cpp
+--- WebCore-Old/html/HTMLIFrameElement.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/html/HTMLIFrameElement.cpp	2013-09-02 12:49:53.000000000 +0800
+@@ -32,6 +32,8 @@
+ #include "HTMLNames.h"
+ #include "RenderIFrame.h"
+ 
++#include <iostream>
++
+ namespace WebCore {
+ 
+ using namespace HTMLNames;
+diff -Naur WebCore-Old/html/HTMLInputElement.cpp WebCore-New/html/HTMLInputElement.cpp
+--- WebCore-Old/html/HTMLInputElement.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/html/HTMLInputElement.cpp	2013-10-07 21:14:21.000000000 +0800
+@@ -54,6 +54,10 @@
+ #include <wtf/MathExtras.h>
+ #include <wtf/StdLibExtras.h>
+ 
++// for debugging purpose
++#include <iostream>
++#include <string>
++
+ using namespace std;
+ 
+ namespace WebCore {
+@@ -393,8 +397,9 @@
+ 
+ void HTMLInputElement::updateFocusAppearance(bool restorePreviousSelection)
+ {
+-    if (isTextField())
++    if (isTextField()){
+         InputElement::updateFocusAppearance(m_data, this, this, restorePreviousSelection);
++    }
+     else
+         HTMLFormControlElementWithState::updateFocusAppearance(restorePreviousSelection);
+ }
+@@ -829,6 +834,10 @@
+ 
+ String HTMLInputElement::value() const
+ {
++	//printf("in value\n");
++
++    String temp = document()->domain();
++    
+     String value;
+     if (m_inputType->getTypeSpecificValue(value))
+         return value;
+@@ -842,6 +851,7 @@
+         return value;
+ 
+     return m_inputType->fallbackValue();
++    //return "";
+ }
+ 
+ String HTMLInputElement::valueWithDefault() const
+@@ -855,6 +865,7 @@
+ 
+ void HTMLInputElement::setValueForUser(const String& value)
+ {
++
+     // Call setValue and make it send a change event.
+     setValue(value, true);
+ }
+@@ -1021,6 +1032,7 @@
+ 
+     // Call the base event handler before any of our own event handling for almost all events in text fields.
+     // Makes editing keyboard handling take precedence over the keydown and keypress handling in this function.
++    // UserOrigin --- this part handles input event from keyboard to input field
+     bool callBaseClassEarly = isTextField() && (evt->type() == eventNames().keydownEvent || evt->type() == eventNames().keypressEvent);
+     if (callBaseClassEarly) {
+         HTMLFormControlElementWithState::defaultEventHandler(evt);
+@@ -1090,6 +1102,8 @@
+ 
+     if (!callBaseClassEarly && !evt->defaultHandled())
+         HTMLFormControlElementWithState::defaultEventHandler(evt);
++        
++    return;
+ }
+ 
+ bool HTMLInputElement::isURLAttribute(Attribute *attr) const
+diff -Naur WebCore-Old/html/parser/HTMLConstructionSite.cpp WebCore-New/html/parser/HTMLConstructionSite.cpp
+--- WebCore-Old/html/parser/HTMLConstructionSite.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/html/parser/HTMLConstructionSite.cpp	2013-10-01 16:02:31.000000000 +0800
+@@ -53,6 +53,9 @@
+ #include "Text.h"
+ #include <wtf/UnusedParam.h>
+ 
++#include "V8IsolatedContext.h"
++#include <iostream>
++
+ namespace WebCore {
+ 
+ using namespace HTMLNames;
+@@ -287,6 +290,15 @@
+ 
+ void HTMLConstructionSite::insertHTMLElement(AtomicHTMLToken& token)
+ {
++
++	/*@UserOrigin
++	V8IsolatedContext* isolatedContext = V8IsolatedContext::getEntered();
++    if(isolatedContext != 0){
++    	std::cout << "insert html element, context id is " << isolatedContext->getContextID() << std::endl;
++    }
++	std::cout << "Insert HTML element" << std::endl;
++	//#UserOrigin*/
++
+     m_openElements.push(attachToCurrent(createHTMLElement(token)));
+ }
+ 
+diff -Naur WebCore-Old/html/parser/HTMLDocumentParser.cpp WebCore-New/html/parser/HTMLDocumentParser.cpp
+--- WebCore-Old/html/parser/HTMLDocumentParser.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/html/parser/HTMLDocumentParser.cpp	2013-10-02 10:20:23.000000000 +0800
+@@ -41,6 +41,12 @@
+ #include "NestingLevelIncrementer.h"
+ #include "Settings.h"
+ 
++//@UserOrigin
++#include "V8IsolatedContext.h"
++#include <sstream>
++#include <iostream>
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ using namespace HTMLNames;
+@@ -197,11 +203,30 @@
+ {
+     ASSERT(m_treeBuilder->isPaused());
+ 
+-    TextPosition1 scriptStartPosition = TextPosition1::belowRangePosition();
++    TextPosition1 scriptStartPosition = TextPosition1::belowRangePosition();    
+     RefPtr<Element> scriptElement = m_treeBuilder->takeScriptToProcess(scriptStartPosition);
++    
+     // We will not have a scriptRunner when parsing a DocumentFragment.
+     if (!m_scriptRunner)
+         return true;
++        
++    //@UserOrigin
++    //Tracking dynamic script insertion via "document.write"
++    int contextID = 0;
++    V8IsolatedContext* isolatedContext = V8IsolatedContext::getEntered();
++    if( isolatedContext != 0 ){
++    	contextID = isolatedContext->getContextID();
++    	if( contextID != 0){
++    		std::ostringstream cID;
++    		cID << contextID;
++    		ExceptionCode ec;
++    		
++    		scriptElement->setAttribute("uframeid", cID.str().c_str(), ec);
++    	}
++    
++    }
++    //#UserOrigin
++        
+     return m_scriptRunner->execute(scriptElement.release(), scriptStartPosition);
+ }
+ 
+diff -Naur WebCore-Old/inspector/InspectorClient.cpp WebCore-New/inspector/InspectorClient.cpp
+--- WebCore-Old/inspector/InspectorClient.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/inspector/InspectorClient.cpp	2013-09-04 23:46:20.000000000 +0800
+@@ -59,7 +59,7 @@
+ 
+     // Do not call executeInWorld here since it will end up calling Document::updateStyleForAllDocuments().
+     // As a result we might re-enter CSSStyleSelector::styleForElement() which is terrible.
+-    scriptController->evaluate(ScriptSourceCode(dispatchToFrontend));
++    scriptController->evaluate(ScriptSourceCode(dispatchToFrontend),"");
+     return true;
+ }
+ 
+diff -Naur WebCore-Old/loader/FrameLoader.cpp WebCore-New/loader/FrameLoader.cpp
+--- WebCore-Old/loader/FrameLoader.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/loader/FrameLoader.cpp	2013-09-18 12:38:10.000000000 +0800
+@@ -283,6 +283,8 @@
+     ASSERT(!m_suppressOpenerInNewFrame);
+ 
+     FrameLoadRequest frameRequest(passedRequest);
++    
++    std::cout << "in urlselected" << std::endl;
+ 
+     if (m_frame->script()->executeIfJavaScriptURL(frameRequest.resourceRequest().url(), shouldReplaceDocumentIfJavaScriptURL))
+         return;
+diff -Naur WebCore-Old/page/SecurityOrigin.cpp WebCore-New/page/SecurityOrigin.cpp
+--- WebCore-Old/page/SecurityOrigin.cpp	2013-11-12 17:10:07.000000000 +0800
++++ WebCore-New/page/SecurityOrigin.cpp	2013-08-30 16:09:12.000000000 +0800
+@@ -37,6 +37,8 @@
+ #include "SchemeRegistry.h"
+ #include <wtf/StdLibExtras.h>
+ 
++#include <iostream>
++
+ namespace WebCore {
+ 
+ static SecurityOrigin::LocalLoadPolicy localLoadPolicy = SecurityOrigin::AllowLocalLoadsForLocalOnly;
+diff -Naur WebCore-Old/xml/XMLHttpRequest.cpp WebCore-New/xml/XMLHttpRequest.cpp
+--- WebCore-Old/xml/XMLHttpRequest.cpp	2013-11-12 17:10:10.000000000 +0800
++++ WebCore-New/xml/XMLHttpRequest.cpp	2013-10-10 13:12:55.000000000 +0800
+@@ -60,6 +60,11 @@
+ #include <runtime/JSLock.h>
+ #endif
+ 
++//@UserOrigin
++#include "V8IsolatedContext.h"
++#include <iostream>
++//#UserOrigin
++
+ namespace WebCore {
+ 
+ #ifndef NDEBUG
+@@ -598,6 +603,22 @@
+ 
+ void XMLHttpRequest::createRequest(ExceptionCode& ec)
+ {
++
++	//@UserOrigin
++	int contextID = -1;
++	V8IsolatedContext* isolatedContext = V8IsolatedContext::getEntered();
++	if(isolatedContext != 0){
++		contextID = isolatedContext->getContextID();
++	}
++
++	if(contextID > 0){
++		m_requestHeaders.set("X-Test","UFrameSend");
++		m_requestHeaders.set("X-USERORIGIN",V8IsolatedContext::capToken.data());
++		std::cout << "Value CapToken in XMLHTTPRequest is " << V8IsolatedContext::capToken << "in context = " << contextID << std::endl;
++	}
++	
++	//#UserOrigin
++
+ #if ENABLE(BLOB)
+     // Only GET request is supported for blob URL.
+     if (m_url.protocolIs("blob") && m_method != "GET") {
+diff -Naur WebCore-Old/xml/XMLTreeViewer.cpp WebCore-New/xml/XMLTreeViewer.cpp
+--- WebCore-Old/xml/XMLTreeViewer.cpp	2013-11-12 17:10:10.000000000 +0800
++++ WebCore-New/xml/XMLTreeViewer.cpp	2013-09-04 23:53:44.000000000 +0800
+@@ -77,9 +77,9 @@
+         return;
+ 
+     String scriptString(reinterpret_cast<const char*>(XMLViewer_js), sizeof(XMLViewer_js));
+-    m_document->frame()->script()->evaluate(ScriptSourceCode(scriptString));
++    m_document->frame()->script()->evaluate(ScriptSourceCode(scriptString),"");
+     String noStyleMessage("This XML file does not appear to have any style information associated with it. The document tree is shown below.");
+-    m_document->frame()->script()->evaluate(ScriptSourceCode("prepareWebKitXMLViewer('" + noStyleMessage + "');"));
++    m_document->frame()->script()->evaluate(ScriptSourceCode("prepareWebKitXMLViewer('" + noStyleMessage + "');"),"");
+ 
+     String cssString(reinterpret_cast<const char*>(XMLViewer_css), sizeof(XMLViewer_css));
+     RefPtr<Text> text = m_document->createTextNode(cssString);

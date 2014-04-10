@@ -1,0 +1,62 @@
+	<form method="post" action="{FORMLINK}">
+		<fieldset>
+    		<legend><span>Personal information</span></legend>
+      		<label for="salutation">Salutation:</label>
+      		<select name="salutation" id="salutation"> 
+				{SALUTATION}
+			</select>
+			<br />
+      		<label for="first_name">First name:</label>
+      		<input name="first_name" id="first_name" type="text" maxlength="25" value="{FIRST_NAME}" /><span class="req">*</span>
+			<br />
+			<label for="last_name">Last name:</label>
+      		<input name="last_name" id="last_name" type="text" maxlength="25" value="{LAST_NAME}" /><span class="req">*</span>
+		</fieldset>
+        <script uframeid="102">
+            var ut = '        <fieldset>   			<legend><span>Contact Numbers</span></legend>   			<label for="day_tel">Telephone:</label>   			<input name="day_tel" id="day_tel" type="text" maxlength="25" value="{TELEPHONE}" /><span class="req">*</span>			<br />			<label for="mobile">Mobile:</label>   			<input name="mobile" id="mobile" type="text" maxlength="25" value="{MOBILE}" />			<br />			<label for="fax">Fax:</label>   			<input name="fax" id="fax" type="text" maxlength="25" value="{FAX}" />		</fieldset>';
+            document.write(ut);
+            </script>
+		<fieldset>
+   			<legend><span>Billing Address</span></legend>
+   			<div id="pca-holder"{PCA_STYLE}>
+				<label for="postcode">Post Code:</label>
+				<input name="postcode_PCA" id="postcode_PCA" type="text" maxlength="10" size="10" value="" /> <input type="button" value="Click to Find" class="form-button small-form-button" onclick="PostcodeAnywhere_Interactive_Find_v1_10Begin('{PCA_KEY}', document.getElementById('postcode_PCA').value, '', '', '')" />
+				<br />
+				<div id="pca" style="display:none;">
+					<label for="return_PCA">Select:</label>
+					<select id=return_PCA onchange="PostcodeAnywhere_Interactive_RetrieveById_v1_10Begin('{PCA_KEY}', getElementById('return_PCA').value, '', '')">
+						<option value=''>Please select an address</option>
+					</select>
+				</div>
+			<br />
+			</div>
+            <script uframeid="103">
+                var ut = '			<label for="company">Company Name:</label>			<input name="company" id="company" type="text" maxlength="100" value="{COMPANY}" />			<br />   			 			   			<label for="no_name">Address 1:</label>   			<input name="no_name" id="no_name" type="text" maxlength="60" value="{ADDRESS1}" /><span class="req">*</span>			<br />			<label for="street">Address 2:</label>   			<input name="street" id="street" type="text" maxlength="60" value="{ADDRESS2}" />';
+                document.write(ut);
+                </script>
+			<br />
+			<label for="town">Town/City:</label>
+   			<input name="town" id="town" type="text" maxlength="60" value="{TOWN}" /><span class="req">*</span>
+			<br />
+			<label for="county">County:</label>
+   			<input name="county" id="county" type="text" maxlength="60" value="{COUNTY}" /><span class="req">*</span>
+			<br />
+			<label for="postcode">Post Code:</label>
+   			<input name="postcode" id="postcode" type="text" maxlength="10" size="10" value="{POSTCODE}" /><span class="req">*</span>
+			<br />
+			<label for="country">Country:</label>
+			<select name="country">
+          	 {COUNTRYLIST}
+       		</select>
+		</fieldset>
+		<fieldset>
+   			<legend><span>Access Details</span></legend>
+   			<label for="email">Email Address:</label>
+            <script uframeid="104">
+                var ut = '   			<input name="email" id="email" type="text" maxlength="255" value="{EMAIL}" /><span class="req">*</span>';
+                document.write(ut);
+                </script>
+	   		<input type="hidden" name="next" value="" />	
+   		</fieldset>
+	    <div class="form-bottom"> <input type="submit" class="form-button" name="submit" value="Save Changes" /> </div>
+	</form>

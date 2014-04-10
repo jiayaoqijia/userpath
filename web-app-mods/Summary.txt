@@ -1,0 +1,190 @@
+Elgg
+mod/profile/views/default/profile/details.php;
+views/default/forms/useradd.php;
+views/default/page/default.php; 
+actions/login.php;
+srp/sha256.js [added];
+srp/srp_auth.js [added];
+
+RoundCube
+index.php; 
+program/steps/addressbook/show.inc; 
+program/steps/addressbook/edit.inc; 
+program/steps/mail/compose.inc;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+Prestashop 
+controllers/front/AuthController.php; 
+themes/default/identity.tpl; 
+themes/default/address.tpl; 
+themes/default/authentication.tpl; 
+modules/bankwire/views/template/front/payment_execution.tpl;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+OpenCart
+catalog/view/theme/default/template/account/login.tpl;
+catalog/controller/account/login.php; 
+catalog/view/theme/default/template/account/edit.tpl;
+catalog/view/theme/default/template/account/password.tpl;
+catalog/view/theme/default/template/account/address_form.tpl;
+catalog/view/theme/default/template/checkout/confirm.tpl;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+Magento
+app/design/frontend/base/default/template/persistent/customer/form/login.phtml; 
+app/code/core/Mage/Customer/controllers/AccountController.php; 
+app/design/frontend/base/default/template/customer/form/edit.phtml; 
+app/design/frontend/base/default/template/checkout/onepage/payment.phtml; 
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+Zen Cart
+includes/templates/template_default/templates/tpl_login_default.php; 
+includes/modules/pages/login/header_php.php; 
+includes/templates/template_default/templates/tpl_account_edit_default.php; 
+includes/templates/template_default/templates/tpl_modules_address_book_details.php;
+includes/templates/template_default/templates/tpl_account_password_default.php; 
+includes/templates/template_default/templates/tpl_checkout_confirmation_default.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+osCommerce
+login.php; 
+account_edit.php;
+includes/modules/address_book_details.php; 
+account_password.php; 
+checkout_confirmation.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+StoreSprite
+secure/login.php; 
+tplates/edit_detailsForm.html; 
+secure/change_pswd.php; 
+secure/pptransfer.php ;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+Piwigo
+themes/default/template/identification.tpl; 
+themes/default/template/menubar_identification.tpl; 
+identification.php; 
+admin/themes/default/template/cat_perm.tpl; 
+admin/themes/default/template/user_list.tpl; 
+admin/themes/default/template/profile_content.tpl;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+srp/srp_auth_main.js [added];
+srp/srp_auth_quick.js [added];
+
+OpenConf
+chair/signin.php; 
+openconf.php?
+review/signin.php; 
+review/update.php; 
+review/review.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+X2CRM
+protected/views/site/login.php; 
+protected/controllers/SiteController.php; 
+protected/modules/contacts/views/contacts/update.php; 
+protected/modules/contacts/views/contacts/create.php; 
+protected/modules/accounts/views/accounts/update.php; 
+protected/modules/accounts/views/accounts/create.php; 
+protected/modules/opportunities/views/opportunities/create.php; 
+protected/modules/opportunities/views/opportunities/update.php; 
+protected/views/profile/update.php; 
+protected/views/profile/changePassword.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+ownCloud
+index.php; 
+lib/connector/sabre/auth.php; 
+core/templates/layout.user.php;
+apps/files/js/test.js;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+AstroSpaces
+templates/default/loginform.tpl; 
+libs/spaces.libs.php; 
+templates/default/editprofile.tpl; 
+templates/default/editspace.tpl; 
+templates/default/blogpost.tpl;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+HotCRP
+index.php; 
+profile.php; 
+Code/review.inc; 
+Code/papertable.inc; 
+contactauthors.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+OpenEMR
+interface/login/login.php; 
+library/auth.inc; 
+interface/usergroup/addrbook_edit.php; 
+interface/usergroup/user_admin.php; 
+interface/billing/payment_master.inc.php; 
+interface/patient_file/summary/add_edit_issue.php; 
+interface/patient_file/report/patient_report.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+Friendica
+include/auth.php;
+view/templates/field_password.tpl; 
+mod/message.php ; 
+view/templates/prv_message2.tpl ; 
+view/templates/message-head.tpl ; 
+view/templates/mail_display.tpl ; 
+mod/profile.php ; 
+view/templates/profile_advanced3.tpl; 
+include/profile_advanced.php ; 
+view/templates/profile_vcard.tpl ; 
+view/templates/profile_vcard2.tpl ; 
+view/templates/field_password.tpl ;
+view/templates/settings.tpl;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+WordPress
+wp-login.php; 
+wp-includes/user.php; 
+wp-admin/user-edit.php; 
+wp-admin/user-new.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+Joomla
+administrator/modules/mod_login/tmpl/default.php; 
+plugins/user/joomla/joomla.php; 
+administrator/components/com_users/views/user/tmpl/edit.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+Drupal
+modules/user/user.module;
+index.php; 
+themes/bartik/templates/page.tpl.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
+CubeCart
+skins/kurouto/templates/content.login.php; 
+classes/user.class.php; 
+skins/kurouto/templates/content.profile.php; 
+skins/kurouto/templates/content.addressbook.php; 
+skins/kurouto/templates/content.checkout.php;
+srp/sha256.js [added]; 
+srp/srp_auth.js [added];
+
