@@ -1,7 +1,7 @@
 UserPath
 ========
 
-## Introduction:
+### Introduction:
 
 --------------------------------------
 
@@ -20,7 +20,7 @@ by 8x to 264x, with minimal developer effort.
 
 --------------------------
 
-## Repo Structure:
+###  Repo Structure:
 
 --------------------------
 
